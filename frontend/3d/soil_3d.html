@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AgriAI — Soil Analyzer 3D</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a1a0a;overflow:hidden;font-family:'Segoe UI',sans-serif}
+#overlay{position:absolute;top:20px;left:20px;color:#a8c380;font-size:14px;z-index:10;pointer-events:none}
+#overlay h2{color:#daa520;font-size:28px;margin-bottom:4px;text-shadow:0 0 20px rgba(218,165,32,.4)}
+#result{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(26,46,26,.85);backdrop-filter:blur(12px);border:1px solid rgba(168,195,128,.25);border-radius:16px;padding:20px 40px;text-align:center;color:#f0ead6;z-index:10;opacity:0;transition:opacity .6s;pointer-events:none}
+#result .label{font-size:14px;color:#a8c380;letter-spacing:3px;text-transform:uppercase}
+#result .val{font-size:42px;font-weight:900;color:#7cb342}
+#result .score{font-size:18px;color:#c8a951;margin-top:4px}
+</style>
+</head>
+<body>
+<div id="overlay"><h2>🔬 Soil Analyzer</h2><p>3D Soil Quality Visualization</p></div>
+<div id="result"><div class="label">Soil Quality</div><div class="val" id="q-val">Good</div><div class="score" id="q-score">Score: 72/100</div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x0a1a0a,.01);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,500);
+camera.position.set(5,6,10);camera.lookAt(0,1,0);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xb8c9a0,.4));
+const dl=new THREE.DirectionalLight(0xffffff,.7);dl.position.set(5,10,5);dl.castShadow=true;scene.add(dl);
+scene.add(new THREE.GridHelper(30,30,0x2d4a2d,0x1e3a1e));
+
+// Soil block — layered cube
+const soilGroup=new THREE.Group();
+const layers=[
+  {y:0,h:1,color:0x3e2723,name:'Bedrock'},
+  {y:1,h:1.2,color:0x5d4037,name:'Subsoil'},
+  {y:2.2,h:1.5,color:0x6d4c41,name:'Topsoil'},
+  {y:3.7,h:.6,color:0x33691e,name:'Organic'}
+];
+layers.forEach(l=>{
+  const geo=new THREE.BoxGeometry(4,l.h,4);
+  const mat=new THREE.MeshStandardMaterial({color:l.color,roughness:.8,metalness:.1});
+  const mesh=new THREE.Mesh(geo,mat);mesh.position.y=l.y+l.h/2;mesh.castShadow=true;
+  soilGroup.add(mesh);
+});
+soilGroup.position.y=0;scene.add(soilGroup);
+
+// Roots
+for(let i=0;i<8;i++){
+  const curve=new THREE.CatmullRomCurve3([
+    new THREE.Vector3((Math.random()-.5)*2,4.3,((Math.random()-.5)*2)),
+    new THREE.Vector3((Math.random()-.5)*3,3,(Math.random()-.5)*3),
+    new THREE.Vector3((Math.random()-.5)*2,2,(Math.random()-.5)*2),
+    new THREE.Vector3((Math.random()-.5)*1.5,1,(Math.random()-.5)*1.5)
+  ]);
+  const tubeGeo=new THREE.TubeGeometry(curve,20,.03,8,false);
+  const tubeMat=new THREE.MeshStandardMaterial({color:0x4e342e,roughness:.7});
+  soilGroup.add(new THREE.Mesh(tubeGeo,tubeMat));
+}
+
+// Mineral particles floating around
+const minGeo=new THREE.BufferGeometry();const mN=200;const mp=new Float32Array(mN*3);const mc=new Float32Array(mN*3);
+for(let i=0;i<mN;i++){
+  const angle=Math.random()*Math.PI*2;const r=4+Math.random()*3;
+  mp[i*3]=Math.cos(angle)*r;mp[i*3+1]=Math.random()*5;mp[i*3+2]=Math.sin(angle)*r;
+  const c=new THREE.Color().setHSL(.08+Math.random()*.1,.5,.4);
+  mc[i*3]=c.r;mc[i*3+1]=c.g;mc[i*3+2]=c.b;
+}
+minGeo.setAttribute('position',new THREE.BufferAttribute(mp,3));
+minGeo.setAttribute('color',new THREE.BufferAttribute(mc,3));
+const minerals=new THREE.Points(minGeo,new THREE.PointsMaterial({size:.1,vertexColors:true,transparent:true,opacity:.6}));
+scene.add(minerals);
+
+let t=0;
+function animate(){
+  requestAnimationFrame(animate);t+=.01;
+  soilGroup.rotation.y=t*.15;
+  minerals.rotation.y=-t*.08;
+  // Gentle float on mineral particles
+  const pos=minGeo.attributes.position.array;
+  for(let i=0;i<mN;i++)pos[i*3+1]+=Math.sin(t*2+i)*.002;
+  minGeo.attributes.position.needsUpdate=true;
+  renderer.render(scene,camera);
+}
+animate();
+setTimeout(()=>{document.getElementById('result').style.opacity='1'},1200);
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.quality_label){
+    document.getElementById('q-val').textContent=e.data.quality_label;
+    document.getElementById('q-score').textContent='Score: '+e.data.quality_score+'/100';
+    const colorMap={Excellent:'#4caf50',Good:'#8bc34a',Fair:'#ffc107',Poor:'#f44336'};
+    document.getElementById('q-val').style.color=colorMap[e.data.quality_label]||'#c8a951';
+  }
+});
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script>
+</body>
+</html>

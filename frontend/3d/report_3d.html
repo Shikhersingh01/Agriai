@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AgriAI — Report Parser 3D</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a1a0a;overflow:hidden;font-family:'Segoe UI',sans-serif}
+#overlay{position:absolute;top:20px;left:20px;color:#a8c380;font-size:14px;z-index:10;pointer-events:none}
+#overlay h2{color:#daa520;font-size:28px;margin-bottom:4px;text-shadow:0 0 20px rgba(218,165,32,.4)}
+#result{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(26,46,26,.85);backdrop-filter:blur(12px);border:1px solid rgba(168,195,128,.25);border-radius:16px;padding:16px 32px;text-align:center;color:#f0ead6;z-index:10;pointer-events:none;opacity:0;transition:opacity .6s}
+.vals{display:flex;gap:20px;justify-content:center;margin-top:8px}
+.val-item{text-align:center}
+.val-item .num{font-size:24px;font-weight:900;color:#daa520}
+.val-item .lbl{font-size:11px;color:#a8c380;letter-spacing:2px;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div id="overlay"><h2>📄 Report Parser</h2><p>3D Document OCR Visualization</p></div>
+<div id="result">
+  <div style="font-size:14px;color:#a8c380;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px">Extracted Values</div>
+  <div class="vals">
+    <div class="val-item"><div class="num" id="v-n">45</div><div class="lbl">N (kg/ha)</div></div>
+    <div class="val-item"><div class="num" id="v-p">28</div><div class="lbl">P (kg/ha)</div></div>
+    <div class="val-item"><div class="num" id="v-k">32</div><div class="lbl">K (kg/ha)</div></div>
+    <div class="val-item"><div class="num" id="v-ph">6.5</div><div class="lbl">pH</div></div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x0a1a0a,.01);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,500);
+camera.position.set(0,5,10);camera.lookAt(0,2,0);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xb8c9a0,.4));
+const dl=new THREE.DirectionalLight(0xffffff,.7);dl.position.set(5,10,5);dl.castShadow=true;scene.add(dl);
+const pl=new THREE.PointLight(0xdaa520,.5,20);pl.position.set(0,5,2);scene.add(pl);
+scene.add(new THREE.GridHelper(20,20,0x2d4a2d,0x1e3a1e));
+
+// Document stack
+const docGroup=new THREE.Group();
+const pageCount=6;
+for(let i=0;i<pageCount;i++){
+  const geo=new THREE.BoxGeometry(3,0.05,4);
+  const mat=new THREE.MeshStandardMaterial({
+    color:new THREE.Color().setHSL(.12,.1,.7+i*.03),roughness:.4,metalness:.1
+  });
+  const page=new THREE.Mesh(geo,mat);page.position.y=i*.15;page.castShadow=true;
+  page.rotation.y=(Math.random()-.5)*.05;
+  page.userData={baseY:i*.15,idx:i,flipped:false};
+  docGroup.add(page);
+
+  // Text lines on each page
+  for(let l=0;l<4;l++){
+    const lineGeo=new THREE.BoxGeometry(2.2+Math.random()*.5,.01,.06);
+    const lineMat=new THREE.MeshBasicMaterial({color:0x37474f,transparent:true,opacity:.4});
+    const line=new THREE.Mesh(lineGeo,lineMat);
+    line.position.set((Math.random()-.5)*.3,i*.15+.03,-1.2+l*.7);
+    docGroup.add(line);
+  }
+}
+docGroup.position.y=1;scene.add(docGroup);
+
+// Scan beam
+const beamGeo=new THREE.PlaneGeometry(3.5,.05);
+const beamMat=new THREE.MeshBasicMaterial({color:0x7cb342,transparent:true,opacity:.5,side:THREE.DoubleSide});
+const beam=new THREE.Mesh(beamGeo,beamMat);beam.position.y=2;beam.rotation.x=Math.PI/2;scene.add(beam);
+
+// Extract particles
+const extractParticles=[];
+function spawnExtractParticle(){
+  const geo=new THREE.SphereGeometry(.06,8,8);
+  const mat=new THREE.MeshStandardMaterial({color:0xdaa520,emissive:0xdaa520,emissiveIntensity:.5,transparent:true,opacity:.8});
+  const p=new THREE.Mesh(geo,mat);
+  p.position.set((Math.random()-.5)*2,1.5+Math.random(),(Math.random()-.5)*3);
+  p.userData={vy:.02+Math.random()*.02,life:1};
+  scene.add(p);extractParticles.push(p);
+}
+
+// Background particles
+const bgGeo=new THREE.BufferGeometry();const bN=200;const bp=new Float32Array(bN*3);
+for(let i=0;i<bN;i++){bp[i*3]=(Math.random()-.5)*20;bp[i*3+1]=Math.random()*10;bp[i*3+2]=(Math.random()-.5)*20}
+bgGeo.setAttribute('position',new THREE.BufferAttribute(bp,3));
+scene.add(new THREE.Points(bgGeo,new THREE.PointsMaterial({color:0x558b2f,size:.05,transparent:true,opacity:.3})));
+
+let t=0;let scanZ=-2;
+function animate(){
+  requestAnimationFrame(animate);t+=.015;
+  // Rotate doc stack gently
+  docGroup.rotation.y=Math.sin(t*.3)*.2;
+  // Scan beam
+  scanZ+=.02;if(scanZ>2)scanZ=-2;
+  beam.position.z=scanZ;beam.material.opacity=.3+Math.sin(t*5)*.2;
+  beam.position.y=1.5+pageCount*.15;
+  // Page flip animation
+  const flipIdx=Math.floor((t*.5)%pageCount);
+  docGroup.children.forEach(c=>{
+    if(c.userData&&c.userData.idx===flipIdx&&!c.userData.flipped){
+      c.userData.flipped=true;
+      setTimeout(()=>{c.userData.flipped=false},2000);
+    }
+    if(c.userData&&c.userData.flipped){
+      c.rotation.x=Math.min(c.rotation.x+.02,-.8);
+      c.position.y=c.userData.baseY+Math.sin(c.rotation.x)*1.5;
+    }else if(c.userData&&c.userData.baseY!==undefined){
+      c.rotation.x*=.95;c.position.y+=(c.userData.baseY-c.position.y)*.05;
+    }
+  });
+  // Extract particles
+  if(Math.random()<.05)spawnExtractParticle();
+  for(let i=extractParticles.length-1;i>=0;i--){
+    const p=extractParticles[i];p.position.y+=p.userData.vy;
+    p.userData.life-=.008;p.material.opacity=p.userData.life*.8;
+    if(p.userData.life<=0){scene.remove(p);extractParticles.splice(i,1)}
+  }
+  renderer.render(scene,camera);
+}
+animate();
+setTimeout(()=>{document.getElementById('result').style.opacity='1'},1500);
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.extracted){
+    const v=e.data.extracted;
+    if(v.N!==undefined)document.getElementById('v-n').textContent=v.N;
+    if(v.P!==undefined)document.getElementById('v-p').textContent=v.P;
+    if(v.K!==undefined)document.getElementById('v-k').textContent=v.K;
+    if(v.pH!==undefined)document.getElementById('v-ph').textContent=v.pH;
+  }
+});
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script>
+</body>
+</html>

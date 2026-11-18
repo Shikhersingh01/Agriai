@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+scikit-learn
+xgboost
+pandas
+numpy
+requests
+pydantic
+python-multipart
+transformers
+torch
+torchvision
+Pillow
+opencv-python-headless
+pdfplumber
+google-generativeai

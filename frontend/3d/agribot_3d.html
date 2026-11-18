@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AgriAI — AgriBot 3D</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a1a0a;overflow:hidden;font-family:'Segoe UI',sans-serif}
+#overlay{position:absolute;top:20px;left:20px;color:#a8c380;font-size:14px;z-index:10;pointer-events:none}
+#overlay h2{color:#daa520;font-size:28px;margin-bottom:4px;text-shadow:0 0 20px rgba(218,165,32,.4)}
+</style>
+</head>
+<body>
+<div id="overlay"><h2>🤖 AgriBot</h2><p>AI Farming Assistant — 3D Visualization</p></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x0a1a0a,.01);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,500);
+camera.position.set(0,4,10);camera.lookAt(0,2,0);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xb8c9a0,.4));
+const dl=new THREE.DirectionalLight(0xffffff,.6);dl.position.set(5,10,5);scene.add(dl);
+const pl=new THREE.PointLight(0xdaa520,.6,20);pl.position.set(0,5,0);scene.add(pl);
+scene.add(new THREE.GridHelper(20,20,0x2d4a2d,0x1e3a1e));
+
+// Robot body
+const robotGroup=new THREE.Group();
+// Head
+const headGeo=new THREE.BoxGeometry(1.6,1.4,1.4,2,2,2);
+const headMat=new THREE.MeshStandardMaterial({color:0x37474f,metalness:.6,roughness:.3});
+const head=new THREE.Mesh(headGeo,headMat);head.position.y=4.5;robotGroup.add(head);
+// Eyes
+const eyeGeo=new THREE.SphereGeometry(.2,16,16);
+const eyeMat=new THREE.MeshStandardMaterial({color:0x7cb342,emissive:0x7cb342,emissiveIntensity:.5});
+const eyeL=new THREE.Mesh(eyeGeo,eyeMat);eyeL.position.set(-.4,4.6,.7);robotGroup.add(eyeL);
+const eyeR=new THREE.Mesh(eyeGeo,eyeMat);eyeR.position.set(.4,4.6,.7);robotGroup.add(eyeR);
+// Body
+const bodyGeo=new THREE.BoxGeometry(2,2.5,1.5,2,2,2);
+const bodyMat=new THREE.MeshStandardMaterial({color:0x455a64,metalness:.5,roughness:.4});
+const body=new THREE.Mesh(bodyGeo,bodyMat);body.position.y=2.5;robotGroup.add(body);
+// Core glow
+const coreGeo=new THREE.SphereGeometry(.3,16,16);
+const coreMat=new THREE.MeshStandardMaterial({color:0xdaa520,emissive:0xdaa520,emissiveIntensity:.6});
+const core=new THREE.Mesh(coreGeo,coreMat);core.position.set(0,2.8,.8);robotGroup.add(core);
+// Arms
+const armGeo=new THREE.CylinderGeometry(.15,.12,2,8);
+const armMat=new THREE.MeshStandardMaterial({color:0x546e7a,metalness:.5,roughness:.4});
+const armL=new THREE.Mesh(armGeo,armMat);armL.position.set(-1.3,2.5,0);armL.rotation.z=.3;robotGroup.add(armL);
+const armR=new THREE.Mesh(armGeo,armMat);armR.position.set(1.3,2.5,0);armR.rotation.z=-.3;robotGroup.add(armR);
+// Antenna
+const antGeo=new THREE.CylinderGeometry(.03,.03,.8,8);
+const antMat=new THREE.MeshStandardMaterial({color:0x78909c});
+const ant=new THREE.Mesh(antGeo,antMat);ant.position.set(0,5.5,0);robotGroup.add(ant);
+const tipGeo=new THREE.SphereGeometry(.1,8,8);
+const tipMat=new THREE.MeshStandardMaterial({color:0xdaa520,emissive:0xdaa520,emissiveIntensity:.8});
+const tip=new THREE.Mesh(tipGeo,tipMat);tip.position.set(0,6,0);robotGroup.add(tip);
+
+scene.add(robotGroup);
+
+// Speech bubbles
+const bubbles=[];
+function createBubble(){
+  const geo=new THREE.SphereGeometry(.15+Math.random()*.2,8,8);
+  const mat=new THREE.MeshStandardMaterial({color:0xa8c380,transparent:true,opacity:.4,emissive:0xa8c380,emissiveIntensity:.2});
+  const b=new THREE.Mesh(geo,mat);
+  b.position.set(1.5+Math.random(),4+Math.random()*2,Math.random()-.5);
+  b.userData={vy:.01+Math.random()*.01,vx:Math.random()*.005,life:1};
+  scene.add(b);bubbles.push(b);
+}
+
+// Data ring around robot
+const dataRingGeo=new THREE.TorusGeometry(2.5,.03,8,64);
+const dataRingMat=new THREE.MeshBasicMaterial({color:0xdaa520,transparent:true,opacity:.3});
+const dataRing1=new THREE.Mesh(dataRingGeo,dataRingMat);dataRing1.position.y=3;scene.add(dataRing1);
+const dataRing2=new THREE.Mesh(dataRingGeo.clone(),dataRingMat.clone());dataRing2.position.y=3;dataRing2.rotation.x=Math.PI/3;scene.add(dataRing2);
+
+// Particles
+const pGeo=new THREE.BufferGeometry();const pN=300;const pp=new Float32Array(pN*3);
+for(let i=0;i<pN;i++){pp[i*3]=(Math.random()-.5)*15;pp[i*3+1]=Math.random()*10;pp[i*3+2]=(Math.random()-.5)*15}
+pGeo.setAttribute('position',new THREE.BufferAttribute(pp,3));
+scene.add(new THREE.Points(pGeo,new THREE.PointsMaterial({color:0x558b2f,size:.05,transparent:true,opacity:.4})));
+
+let t=0;
+function animate(){
+  requestAnimationFrame(animate);t+=.015;
+  // Robot idle animation
+  head.rotation.y=Math.sin(t)*.2;
+  head.position.y=4.5+Math.sin(t*2)*.05;
+  armL.rotation.z=.3+Math.sin(t*1.5)*.1;
+  armR.rotation.z=-.3-Math.sin(t*1.5)*.1;
+  core.material.emissiveIntensity=.4+Math.sin(t*3)*.3;
+  tip.material.emissiveIntensity=.5+Math.sin(t*4)*.4;
+  // Data rings
+  dataRing1.rotation.y=t*.5;dataRing1.rotation.z=Math.sin(t*.3)*.2;
+  dataRing2.rotation.y=-t*.3;dataRing2.rotation.x=Math.PI/3+Math.sin(t*.4)*.1;
+  // Speech bubbles
+  if(Math.random()<.03)createBubble();
+  for(let i=bubbles.length-1;i>=0;i--){
+    const b=bubbles[i];b.position.y+=b.userData.vy;b.position.x+=b.userData.vx;
+    b.userData.life-=.005;b.material.opacity=b.userData.life*.4;
+    if(b.userData.life<=0){scene.remove(b);bubbles.splice(i,1)}
+  }
+  renderer.render(scene,camera);
+}
+animate();
+
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script>
+</body>
+</html>

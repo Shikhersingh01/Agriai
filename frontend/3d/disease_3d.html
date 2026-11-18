@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AgriAI — Disease Detector 3D</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a1a0a;overflow:hidden;font-family:'Segoe UI',sans-serif}
+#overlay{position:absolute;top:20px;left:20px;color:#a8c380;font-size:14px;z-index:10;pointer-events:none}
+#overlay h2{color:#daa520;font-size:28px;margin-bottom:4px;text-shadow:0 0 20px rgba(218,165,32,.4)}
+#status{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(26,46,26,.85);backdrop-filter:blur(12px);border:1px solid rgba(168,195,128,.25);border-radius:16px;padding:20px 40px;text-align:center;color:#f0ead6;z-index:10;pointer-events:none;opacity:0;transition:opacity .6s}
+#status .label{font-size:14px;color:#a8c380;letter-spacing:3px;text-transform:uppercase}
+#status .val{font-size:42px;font-weight:900;color:#7cb342;text-shadow:0 0 25px rgba(124,179,66,.5)}
+</style>
+</head>
+<body>
+<div id="overlay"><h2>🍃 Disease Detector</h2><p>3D Leaf Health Scanner</p></div>
+<div id="status"><div class="label">Plant Health</div><div class="val" id="health-val">✅ Healthy</div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x0a1a0a,.01);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,500);
+camera.position.set(0,4,10);camera.lookAt(0,1,0);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xb8c9a0,.5));
+const dl=new THREE.DirectionalLight(0xffffff,.6);dl.position.set(3,8,5);dl.castShadow=true;scene.add(dl);
+const pl=new THREE.PointLight(0x7cb342,.8,20);pl.position.set(0,5,0);scene.add(pl);
+
+// Ground
+scene.add(new THREE.GridHelper(30,30,0x2d4a2d,0x1e3a1e));
+
+// Create leaf shape using LatheGeometry
+const leafGroup=new THREE.Group();
+const leafPoints=[];
+for(let i=0;i<=20;i++){
+  const t=i/20;const angle=t*Math.PI;
+  const r=Math.sin(angle)*2.5*(1-t*.3);
+  leafPoints.push(new THREE.Vector2(r,t*5-2.5));
+}
+const leafGeo=new THREE.LatheGeometry(leafPoints,32,0,Math.PI);
+const leafMat=new THREE.MeshStandardMaterial({color:0x4caf50,metalness:.1,roughness:.6,side:THREE.DoubleSide,transparent:true,opacity:.9});
+const leaf=new THREE.Mesh(leafGeo,leafMat);leaf.castShadow=true;
+leaf.rotation.z=Math.PI/6;leafGroup.add(leaf);
+
+// Leaf vein (stem)
+const stemGeo=new THREE.CylinderGeometry(.05,.08,6,8);
+const stemMat=new THREE.MeshStandardMaterial({color:0x2e7d32,roughness:.7});
+const stem=new THREE.Mesh(stemGeo,stemMat);stem.position.y=0;leafGroup.add(stem);
+
+leafGroup.position.y=3;scene.add(leafGroup);
+
+// Scan ring effect
+const ringGeo=new THREE.TorusGeometry(3.5,.05,8,64);
+const ringMat=new THREE.MeshBasicMaterial({color:0x7cb342,transparent:true,opacity:.4});
+const scanRing=new THREE.Mesh(ringGeo,ringMat);scanRing.rotation.x=Math.PI/2;scanRing.position.y=3;scene.add(scanRing);
+
+// Particles — spores/pollen
+const sporeGeo=new THREE.BufferGeometry();const sN=300;const sp=new Float32Array(sN*3);const sc=new Float32Array(sN*3);
+for(let i=0;i<sN;i++){
+  sp[i*3]=(Math.random()-.5)*15;sp[i*3+1]=Math.random()*10;sp[i*3+2]=(Math.random()-.5)*15;
+  const c=new THREE.Color().setHSL(.28+Math.random()*.1,.7,.4);
+  sc[i*3]=c.r;sc[i*3+1]=c.g;sc[i*3+2]=c.b;
+}
+sporeGeo.setAttribute('position',new THREE.BufferAttribute(sp,3));
+sporeGeo.setAttribute('color',new THREE.BufferAttribute(sc,3));
+scene.add(new THREE.Points(sporeGeo,new THREE.PointsMaterial({size:.07,vertexColors:true,transparent:true,opacity:.5})));
+
+let t=0;let scanY=0;let isHealthy=true;
+function animate(){
+  requestAnimationFrame(animate);t+=.01;
+  leafGroup.rotation.y=t*.3;
+  leaf.rotation.x=Math.sin(t*.5)*.1;
+  // Scan ring animation
+  scanY+=.03;if(scanY>6)scanY=0;
+  scanRing.position.y=scanY;scanRing.scale.setScalar(1+Math.sin(t*2)*.1);
+  scanRing.material.opacity=.2+Math.sin(t*3)*.2;
+  // Pulse glow
+  pl.intensity=.6+Math.sin(t*2)*.3;
+  renderer.render(scene,camera);
+}
+animate();
+setTimeout(()=>{document.getElementById('status').style.opacity='1'},1000);
+
+window.addEventListener('message',e=>{
+  if(e.data){
+    const el=document.getElementById('health-val');
+    if(e.data.is_healthy){
+      el.textContent='✅ Healthy';el.style.color='#7cb342';
+      leafMat.color.setHex(0x4caf50);pl.color.setHex(0x7cb342);
+    }else{
+      el.textContent='⚠️ '+e.data.disease_name;el.style.color='#ef5350';
+      leafMat.color.setHex(0x8b4513);pl.color.setHex(0xef5350);
+    }
+  }
+});
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script>
+</body>
+</html>
